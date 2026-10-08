@@ -3,6 +3,7 @@ name: Pack extension
 on:
   push:
     branches: [main, "cursor/**"]
+    tags: ["v*"]
   pull_request:
     branches: [main]
   release:
@@ -77,12 +78,18 @@ jobs:
           path: ${{ env.FIREFOX_ZIP }}
           if-no-files-found: error
 
+      # Runs for tag pushes (v*) and for GitHub Release "published" events
+      # (github.ref is refs/tags/<tag> in both cases). Branch pushes / PRs skip this.
       - name: Attach packages to GitHub Release
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ env.CHROMIUM_ZIP }}
             ${{ env.FIREFOX_ZIP }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

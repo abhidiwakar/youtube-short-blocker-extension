@@ -98,7 +98,19 @@ On every push / pull request (and when you run the workflow manually), CI packs 
 2. Open the latest successful run → **Artifacts**.
 3. Download the zip for your browser.
 
-Publishing a GitHub Release also attaches both zips to that release. Safari still needs the Xcode conversion path in [safari/README.md](safari/README.md).
+### Attach zips to a GitHub Release
+
+Branch pushes and pull requests only upload **Actions artifacts**. Release assets are attached when the workflow runs on a **version tag** (or a published GitHub Release for that tag):
+
+```bash
+# from main, after the version in manifest.json is correct
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+That creates/updates the GitHub Release for `v1.0.1` and uploads both zip files. You can also publish a Release in the GitHub UI for a `v*` tag — the same attach step runs.
+
+Safari still needs the Xcode conversion path in [safari/README.md](safari/README.md).
 
 Workflow file: [`.github/workflows/pack-extension.yml`](.github/workflows/pack-extension.yml).
 
