@@ -1,8 +1,8 @@
 /**
  * YouTube Short Blocker — content script
  *
- * Hides `ytm-rich-section-renderer` (and related Shorts shelves) and
- * sidebar guide entries labeled "Shorts" on youtube.com / m.youtube.com,
+ * Hides Shorts UI (rich sections, shelves, guide entry, mobile pivot tab)
+ * and redirects /shorts/ URLs to the site home on youtube.com / m.youtube.com,
  * including after SPA navigation and dynamic DOM re-injection.
  */
 (function () {
@@ -69,6 +69,32 @@
     root.querySelectorAll("yt-formatted-string").forEach(hideGuideEntryForLabel);
   }
 
+  function isShortsSpan(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+    const tag = el.tagName && el.tagName.toLowerCase();
+    if (tag !== "span") return false;
+    return (el.textContent || "").trim() === SHORTS_LABEL;
+  }
+
+  function hidePivotItemForSpan(el) {
+    if (!isShortsSpan(el)) return;
+    const item = el.closest && el.closest("ytm-pivot-bar-item-renderer");
+    if (item) hideNode(item);
+  }
+
+  function hidePivotShortsItems(root) {
+    if (!root) return;
+
+    if (isShortsSpan(root)) {
+      hidePivotItemForSpan(root);
+    }
+
+    if (!root.querySelectorAll) return;
+    root
+      .querySelectorAll("ytm-pivot-bar-item-renderer span")
+      .forEach(hidePivotItemForSpan);
+  }
+
   function hideMatchingIn(root) {
     if (!root || !root.querySelectorAll) return;
 
@@ -85,6 +111,7 @@
     }
 
     hideGuideShortsEntries(root);
+    hidePivotShortsItems(root);
   }
 
   function scanSubtree(node) {
@@ -95,15 +122,67 @@
     node.querySelectorAll("*").forEach((el) => {
       if (matchesTarget(el)) hideNode(el);
       if (isShortsFormattedString(el)) hideGuideEntryForLabel(el);
+      if (isShortsSpan(el)) hidePivotItemForSpan(el);
     });
   }
 
-  function formattedStringFromTextTarget(target) {
+  function elementFromTextTarget(target) {
     if (!target) return null;
     if (target.nodeType === Node.TEXT_NODE) {
       return target.parentElement;
     }
     return target.nodeType === Node.ELEMENT_NODE ? target : null;
+  }
+
+  function handleLabelMutationTarget(target) {
+    const el = elementFromTextTarget(target);
+    hideGuideEntryForLabel(el);
+    hidePivotItemForSpan(el);
+  }
+
+  /* ---- /shorts/ redirect (full load + SPA) ---- */
+
+  function isShortsPath(pathname) {
+    return /^\/shorts(?:\/|$)/i.test(pathname || "");
+  }
+
+  function homeUrlFor(url) {
+    return url.origin + "/";
+  }
+
+  function maybeRedirectShorts() {
+    try {
+      if (!isShortsPath(location.pathname)) return false;
+      const home = homeUrlFor(location);
+      if (location.href === home) return false;
+      location.replace(home);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function urlLooksLikeShorts(url) {
+    if (url == null || url === "") return false;
+    try {
+      return isShortsPath(new URL(String(url), location.href).pathname);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function redirectUrlToHome(url) {
+    try {
+      const next = new URL(String(url), location.href);
+      return homeUrlFor(next);
+    } catch (_) {
+      return location.origin + "/";
+    }
+  }
+
+  // Full page load / early document_start.
+  if (maybeRedirectShorts()) {
+    return;
   }
 
   let scheduled = false;
@@ -112,6 +191,7 @@
     scheduled = true;
     const run = () => {
       scheduled = false;
+      if (maybeRedirectShorts()) return;
       hideMatchingIn(document);
     };
     if (typeof requestAnimationFrame === "function") {
@@ -126,24 +206,24 @@
       if (mutation.type === "childList") {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.TEXT_NODE) {
-            hideGuideEntryForLabel(formattedStringFromTextTarget(node));
+            handleLabelMutationTarget(node);
             return;
           }
           if (node.nodeType !== Node.ELEMENT_NODE) return;
           scanSubtree(node);
         });
-        // Text replacements inside existing guide labels.
+        // Text replacements inside existing guide / pivot labels.
         if (mutation.target && mutation.target.nodeType === Node.ELEMENT_NODE) {
-          hideGuideEntryForLabel(mutation.target);
-          if (
-            mutation.target.tagName &&
-            mutation.target.tagName.toLowerCase() !== "yt-formatted-string"
-          ) {
+          handleLabelMutationTarget(mutation.target);
+          const tag =
+            mutation.target.tagName && mutation.target.tagName.toLowerCase();
+          if (tag !== "yt-formatted-string" && tag !== "span") {
             hideGuideShortsEntries(mutation.target);
+            hidePivotShortsItems(mutation.target);
           }
         }
       } else if (mutation.type === "characterData") {
-        hideGuideEntryForLabel(formattedStringFromTextTarget(mutation.target));
+        handleLabelMutationTarget(mutation.target);
       } else if (mutation.type === "attributes") {
         if (matchesTarget(mutation.target)) {
           hideNode(mutation.target);
@@ -167,6 +247,7 @@
 
   // YouTube fires these on SPA navigations (desktop polymer + mobile).
   function onYouTubeNavigate() {
+    if (maybeRedirectShorts()) return;
     scheduleScan();
   }
 
@@ -180,24 +261,41 @@
     window.addEventListener(eventName, onYouTubeNavigate, true);
   });
 
-  // Fallback for history-based SPA transitions.
+  // Fallback for history-based SPA transitions (including into /shorts/).
   const pushState = history.pushState;
   const replaceState = history.replaceState;
   if (typeof pushState === "function") {
-    history.pushState = function () {
+    history.pushState = function (state, title, url) {
+      if (urlLooksLikeShorts(url)) {
+        location.replace(redirectUrlToHome(url));
+        return;
+      }
       const result = pushState.apply(this, arguments);
+      if (maybeRedirectShorts()) return result;
       scheduleScan();
       return result;
     };
   }
   if (typeof replaceState === "function") {
-    history.replaceState = function () {
+    history.replaceState = function (state, title, url) {
+      if (urlLooksLikeShorts(url)) {
+        location.replace(redirectUrlToHome(url));
+        return;
+      }
       const result = replaceState.apply(this, arguments);
+      if (maybeRedirectShorts()) return result;
       scheduleScan();
       return result;
     };
   }
-  window.addEventListener("popstate", scheduleScan, true);
+  window.addEventListener(
+    "popstate",
+    function () {
+      if (maybeRedirectShorts()) return;
+      scheduleScan();
+    },
+    true
+  );
 
   // Initial pass + observer. document_start may run before body exists.
   hideMatchingIn(document);
