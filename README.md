@@ -4,7 +4,9 @@ Cross-browser extension that hides YouTube Shorts UI on **youtube.com** and **m.
 
 **Primary target:** `ytm-rich-section-renderer`  
 **Also hides (desktop Shorts shelves):** `ytd-rich-shelf-renderer[is-shorts]`, `ytd-reel-shelf-renderer`  
-**Also hides (sidebar guide):** parent `ytd-guide-entry-renderer` when a child `yt-formatted-string` has trimmed text exactly `Shorts`
+**Also hides (sidebar guide):** parent `ytd-guide-entry-renderer` when a child `yt-formatted-string` has trimmed text exactly `Shorts`  
+**Also hides (mobile pivot):** `ytm-pivot-bar-item-renderer` when it contains a `span` whose trimmed text is exactly `Shorts`  
+**Redirects:** `/shorts/*` on `m.youtube.com`, `youtube.com`, and `www.youtube.com` → that host’s site root (`/`), including SPA navigations
 
 | Browser | Support |
 |---------|---------|
@@ -22,7 +24,9 @@ Cross-browser extension that hides YouTube Shorts UI on **youtube.com** and **m.
 1. A content script and stylesheet inject at `document_start` on matching YouTube hosts.
 2. CSS forces matching Shorts / rich-section nodes to stay hidden.
 3. The script also finds `yt-formatted-string` labels whose trimmed text is exactly `Shorts` and hides the parent `ytd-guide-entry-renderer`.
-4. A `MutationObserver` plus YouTube navigation events (`yt-navigate-finish`, history hooks) re-hide nodes if the SPA re-injects them.
+4. On mobile, it hides `ytm-pivot-bar-item-renderer` items whose `span` label trims to exactly `Shorts`.
+5. Visiting or SPA-navigating to `/shorts/...` redirects to the same host’s `/` via `location.replace`.
+6. A `MutationObserver` plus YouTube navigation events (`yt-navigate-finish`, history hooks) re-hide nodes if the SPA re-injects them.
 
 ---
 
