@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Short Blocker",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Hides YouTube Shorts UI (shelves, guide, mobile pivot) and redirects /shorts/ URLs to home on youtube.com and m.youtube.com.",
   "icons": {
     "16": "icons/icon16.png",
