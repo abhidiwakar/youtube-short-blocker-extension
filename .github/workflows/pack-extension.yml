@@ -1,0 +1,88 @@
+name: Pack extension
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    name: Build browser packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read extension version
+        id: meta
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Packaging YouTube Short Blocker v${VERSION}"
+
+      - name: Stage package contents
+        run: |
+          STAGE=dist/extension
+          mkdir -p "$STAGE"
+          cp manifest.json LICENSE README.md "$STAGE/"
+          cp -R content icons "$STAGE/"
+          find "$STAGE" -name '.DS_Store' -delete
+          echo "Staged files:"
+          find "$STAGE" -type f | sort
+
+      - name: Pack Chromium zip (Chrome / Edge / Brave / Opera)
+        run: |
+          OUT="$PWD/youtube-short-blocker-chromium-v${{ steps.meta.outputs.version }}.zip"
+          (cd dist/extension && zip -r "$OUT" .)
+          echo "CHROMIUM_ZIP=$OUT" >> "$GITHUB_ENV"
+          ls -lh "$OUT"
+          unzip -l "$OUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pack Firefox zip (web-ext)
+        run: |
+          npx --yes web-ext@8 build \
+            --source-dir dist/extension \
+            --artifacts-dir ./web-ext-artifacts \
+            --filename "youtube-short-blocker-firefox-v${{ steps.meta.outputs.version }}.zip" \
+            --overwrite-dest
+          FIREFOX_ZIP="$PWD/web-ext-artifacts/youtube-short-blocker-firefox-v${{ steps.meta.outputs.version }}.zip"
+          echo "FIREFOX_ZIP=$FIREFOX_ZIP" >> "$GITHUB_ENV"
+          ls -lh web-ext-artifacts/
+          unzip -l "$FIREFOX_ZIP"
+
+      - name: Upload Chromium package
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-short-blocker-chromium-v${{ steps.meta.outputs.version }}
+          path: ${{ env.CHROMIUM_ZIP }}
+          if-no-files-found: error
+
+      - name: Upload Firefox package
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-short-blocker-firefox-v${{ steps.meta.outputs.version }}
+          path: ${{ env.FIREFOX_ZIP }}
+          if-no-files-found: error
+
+      - name: Attach packages to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.CHROMIUM_ZIP }}
+            ${{ env.FIREFOX_ZIP }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

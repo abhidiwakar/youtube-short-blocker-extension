@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Short Blocker",
+  "version": "1.0.1",
+  "description": "Hides YouTube Shorts rich sections and the sidebar Shorts guide entry on youtube.com and m.youtube.com.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "*://youtube.com/*",
+    "*://m.youtube.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.youtube.com/*",
+        "*://youtube.com/*",
+        "*://m.youtube.com/*"
+      ],
+      "css": ["content/hide-shorts.css"],
+      "js": ["content/hide-shorts.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "youtube-short-blocker@local",
+      "strict_min_version": "109.0"
+    },
+    "safari": {
+      "strict_min_version": "15.4"
+    }
+  }
+}

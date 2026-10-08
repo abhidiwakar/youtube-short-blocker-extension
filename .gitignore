@@ -1,0 +1,24 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Pack / Firefox web-ext
+dist/
+web-ext-artifacts/
+*.xpi
+youtube-short-blocker-*.zip
+
+# Node (if using web-ext locally)
+node_modules/
+npm-debug.log*
+
+# Safari / Xcode (generated locally on a Mac; optional to commit)
+safari/YouTubeShortBlocker/
+*.xcuserstate
+**/xcuserdata/
+**/DerivedData/
+*.ipa
+*.dSYM
