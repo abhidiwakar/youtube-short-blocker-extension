@@ -1,0 +1,113 @@
+name: Bump version
+
+# On every push to main (typically a merged PR), bump the extension patch
+# version, commit it, and tag. Pack + GitHub Release are handled by the
+# "Pack extension" workflow via workflow_run (GITHUB_TOKEN tag pushes do not
+# start new workflows on their own).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump-version-main
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump patch version
+    runs-on: ubuntu-latest
+    # Avoid loops: do not bump our own release commits.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      did_bump: ${{ steps.bump.outputs.did_bump }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version in repo files
+        id: bump
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json
+          import pathlib
+          import re
+          import os
+
+          root = pathlib.Path(".")
+          manifest_path = root / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          old = manifest["version"]
+          parts = old.split(".")
+          if len(parts) != 3 or not all(p.isdigit() for p in parts):
+              raise SystemExit(f"Unsupported version format: {old!r} (expected MAJOR.MINOR.PATCH)")
+          major, minor, patch = (int(p) for p in parts)
+          new = f"{major}.{minor}.{patch + 1}"
+          manifest["version"] = new
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+          # Keep a plain VERSION file in sync (handy for scripts / CI).
+          (root / "VERSION").write_text(new + "\n", encoding="utf-8")
+
+          # Rewrite any vMAJOR.MINOR.PATCH examples in markdown that match the old version.
+          old_tag = f"v{old}"
+          new_tag = f"v{new}"
+          md_pattern = re.compile(rf"\bv{re.escape(old)}\b")
+          for path in root.rglob("*"):
+              if not path.is_file():
+                  continue
+              if any(part in {".git", "node_modules", "dist", "web-ext-artifacts"} for part in path.parts):
+                  continue
+              if path.suffix.lower() not in {".md", ".json", ".yml", ".yaml", ".txt"} and path.name != "VERSION":
+                  continue
+              if path.resolve() == manifest_path.resolve():
+                  continue
+              text = path.read_text(encoding="utf-8")
+              updated = md_pattern.sub(new_tag, text)
+              updated = updated.replace(f'"version": "{old}"', f'"version": "{new}"')
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+                  print(f"updated {path}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={new}\n")
+              fh.write(f"tag={new_tag}\n")
+              fh.write("did_bump=true\n")
+          print(f"Bumped version {old} -> {new}")
+          PY
+
+      - name: Commit, tag, and push
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.bump.outputs.version }}"
+          TAG="${{ steps.bump.outputs.tag }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No version changes to commit"
+            exit 0
+          fi
+
+          # [skip ci] prevents this push from re-entering Bump version (and a
+          # second Pack via workflow_run). Pack is chained from *this* run.
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+
+          # Push commit first, then tag. Pack is chained via workflow_run
+          # (tag/commit pushes with GITHUB_TOKEN do not start new workflows).
+          git push origin HEAD:main
+          git push origin "${TAG}"

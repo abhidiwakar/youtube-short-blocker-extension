@@ -1,8 +1,14 @@
 name: Pack extension
 
 on:
+  # After Bump version finishes on main — this is the run that builds zips
+  # and attaches them to the GitHub Release for the new tag.
+  workflow_run:
+    workflows: ["Bump version"]
+    types: [completed]
+
   push:
-    branches: [main, "cursor/**"]
+    branches: ["cursor/**"]
     tags: ["v*"]
   pull_request:
     branches: [main]
@@ -12,21 +18,42 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   pack:
     name: Build browser packages
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_run.head_sha is the merge that *triggered* the bump (old
+          # version). Check out main + newest v* tag instead after bump.
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.sha }}
+          fetch-depth: 0
+
+      - name: Check out newest release tag (post-bump)
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          TAG="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
+          if [ -z "$TAG" ]; then
+            echo "No v* tag found after bump" >&2
+            exit 1
+          fi
+          echo "Checking out ${TAG}"
+          git checkout "${TAG}"
 
       - name: Read extension version
         id: meta
         run: |
           VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Packaging YouTube Short Blocker v${VERSION}"
 
       - name: Stage package contents
@@ -35,6 +62,8 @@ jobs:
           mkdir -p "$STAGE"
           cp manifest.json LICENSE README.md "$STAGE/"
           cp -R content icons "$STAGE/"
+          # Optional VERSION file if present
+          if [ -f VERSION ]; then cp VERSION "$STAGE/"; fi
           find "$STAGE" -name '.DS_Store' -delete
           echo "Staged files:"
           find "$STAGE" -type f | sort
@@ -78,17 +107,16 @@ jobs:
           path: ${{ env.FIREFOX_ZIP }}
           if-no-files-found: error
 
-      # Runs for tag pushes (v*) and for GitHub Release "published" events
-      # (github.ref is refs/tags/<tag> in both cases). Branch pushes / PRs skip this.
+      # Release assets: after auto-bump on main, on v* tags, or when a Release is published.
       - name: Attach packages to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ github.event_name == 'workflow_run' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' }}
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ env.CHROMIUM_ZIP }}
             ${{ env.FIREFOX_ZIP }}
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
           fail_on_unmatched_files: true
         env:

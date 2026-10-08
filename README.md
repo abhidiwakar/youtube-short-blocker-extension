@@ -87,7 +87,17 @@ Full notes: [safari/README.md](safari/README.md).
 
 ## Packaged builds (GitHub Actions)
 
-On every push / pull request (and when you run the workflow manually), CI packs installable zips:
+### Automatic releases (merge to `main`)
+
+1. **Bump version** runs on every push to `main` (except `chore(release):` commits).
+2. It bumps the patch version in `manifest.json` and `VERSION`, commits `chore(release): vX.Y.Z`, and creates tag `vX.Y.Z`.
+3. **Pack extension** then starts automatically (`workflow_run` after a successful bump), builds the browser zips, and attaches them to the GitHub Release for that tag.
+
+So: merge a PR into `main` → wait for **Bump version** then **Pack extension** → open [Releases](../../releases) for the new `v*` assets.
+
+### PR / branch artifacts
+
+Pull requests and `cursor/**` branch pushes still pack zips as **Actions artifacts** (not Release assets):
 
 | Artifact | Use with |
 |----------|----------|
@@ -98,21 +108,9 @@ On every push / pull request (and when you run the workflow manually), CI packs 
 2. Open the latest successful run → **Artifacts**.
 3. Download the zip for your browser.
 
-### Attach zips to a GitHub Release
-
-Branch pushes and pull requests only upload **Actions artifacts**. Release assets are attached when the workflow runs on a **version tag** (or a published GitHub Release for that tag):
-
-```bash
-# from main, after the version in manifest.json is correct
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-That creates/updates the GitHub Release for `v1.0.1` and uploads both zip files. You can also publish a Release in the GitHub UI for a `v*` tag — the same attach step runs.
-
 Safari still needs the Xcode conversion path in [safari/README.md](safari/README.md).
 
-Workflow file: [`.github/workflows/pack-extension.yml`](.github/workflows/pack-extension.yml).
+Workflows: [`.github/workflows/bump-version.yml`](.github/workflows/bump-version.yml), [`.github/workflows/pack-extension.yml`](.github/workflows/pack-extension.yml).
 
 ---
 
@@ -120,12 +118,13 @@ Workflow file: [`.github/workflows/pack-extension.yml`](.github/workflows/pack-e
 
 ```
 manifest.json          # Manifest V3 (Chrome, Firefox, Safari converter input)
+VERSION                # Same semver as manifest.json (kept in sync by CI)
 content/
   hide-shorts.css      # CSS hide rules
   hide-shorts.js       # MutationObserver + SPA navigation hooks
 icons/                 # Extension icons
 safari/README.md       # Safari desktop + iOS/iPad packaging path
-.github/workflows/     # CI packaging
+.github/workflows/     # Version bump + CI packaging
 ```
 
 ---

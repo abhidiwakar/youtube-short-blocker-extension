@@ -11,6 +11,10 @@ web-ext-artifacts/
 *.xpi
 youtube-short-blocker-*.zip
 
+# Keep root VERSION tracked (bumped by CI); ignore accidental local copies elsewhere
+**/VERSION.bak
+
+
 # Node (if using web-ext locally)
 node_modules/
 npm-debug.log*
