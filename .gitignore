@@ -5,9 +5,11 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Firefox web-ext
+# Pack / Firefox web-ext
+dist/
 web-ext-artifacts/
 *.xpi
+youtube-short-blocker-*.zip
 
 # Node (if using web-ext locally)
 node_modules/

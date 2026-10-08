@@ -85,6 +85,25 @@ Full notes: [safari/README.md](safari/README.md).
 
 ---
 
+## Packaged builds (GitHub Actions)
+
+On every push / pull request (and when you run the workflow manually), CI packs installable zips:
+
+| Artifact | Use with |
+|----------|----------|
+| `youtube-short-blocker-chromium-v*.zip` | Chrome, Edge, Brave, Opera, other Chromium browsers |
+| `youtube-short-blocker-firefox-v*.zip` | Firefox (`about:addons` → Install Add-on From File, or temporary load) |
+
+1. Open the [Actions](../../actions) tab → workflow **Pack extension**.
+2. Open the latest successful run → **Artifacts**.
+3. Download the zip for your browser.
+
+Publishing a GitHub Release also attaches both zips to that release. Safari still needs the Xcode conversion path in [safari/README.md](safari/README.md).
+
+Workflow file: [`.github/workflows/pack-extension.yml`](.github/workflows/pack-extension.yml).
+
+---
+
 ## Project layout
 
 ```
@@ -94,6 +113,7 @@ content/
   hide-shorts.js       # MutationObserver + SPA navigation hooks
 icons/                 # Extension icons
 safari/README.md       # Safari desktop + iOS/iPad packaging path
+.github/workflows/     # CI packaging
 ```
 
 ---
