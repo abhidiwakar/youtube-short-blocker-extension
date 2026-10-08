@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Short Blocker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Hides YouTube Shorts rich sections and the sidebar Shorts guide entry on youtube.com and m.youtube.com.",
   "icons": {
     "16": "icons/icon16.png",
@@ -21,8 +21,12 @@
         "*://youtube.com/*",
         "*://m.youtube.com/*"
       ],
-      "css": ["content/hide-shorts.css"],
-      "js": ["content/hide-shorts.js"],
+      "css": [
+        "content/hide-shorts.css"
+      ],
+      "js": [
+        "content/hide-shorts.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }
