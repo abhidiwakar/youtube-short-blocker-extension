@@ -1,9 +1,9 @@
 /**
  * YouTube Short Blocker — content script
  *
- * Hides `ytm-rich-section-renderer` (and related Shorts shelves) on
- * youtube.com / m.youtube.com, including after SPA navigation and
- * dynamic DOM re-injection.
+ * Hides `ytm-rich-section-renderer` (and related Shorts shelves) and
+ * sidebar guide entries labeled "Shorts" on youtube.com / m.youtube.com,
+ * including after SPA navigation and dynamic DOM re-injection.
  */
 (function () {
   "use strict";
@@ -14,6 +14,7 @@
     "ytd-reel-shelf-renderer",
   ];
 
+  const SHORTS_LABEL = "Shorts";
   const HIDDEN_CLASS = "ysb-hidden-shorts";
   const HIDDEN_ATTR = "data-ysb-hidden";
 
@@ -44,6 +45,30 @@
     return false;
   }
 
+  function isShortsFormattedString(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+    const tag = el.tagName && el.tagName.toLowerCase();
+    if (tag !== "yt-formatted-string") return false;
+    return (el.textContent || "").trim() === SHORTS_LABEL;
+  }
+
+  function hideGuideEntryForLabel(el) {
+    if (!isShortsFormattedString(el)) return;
+    const entry = el.closest && el.closest("ytd-guide-entry-renderer");
+    if (entry) hideNode(entry);
+  }
+
+  function hideGuideShortsEntries(root) {
+    if (!root) return;
+
+    if (isShortsFormattedString(root)) {
+      hideGuideEntryForLabel(root);
+    }
+
+    if (!root.querySelectorAll) return;
+    root.querySelectorAll("yt-formatted-string").forEach(hideGuideEntryForLabel);
+  }
+
   function hideMatchingIn(root) {
     if (!root || !root.querySelectorAll) return;
 
@@ -58,6 +83,8 @@
     if (matchesTarget(root)) {
       hideNode(root);
     }
+
+    hideGuideShortsEntries(root);
   }
 
   function scanSubtree(node) {
@@ -67,7 +94,16 @@
     // Catch nodes that appear inside added subtrees before attributes settle.
     node.querySelectorAll("*").forEach((el) => {
       if (matchesTarget(el)) hideNode(el);
+      if (isShortsFormattedString(el)) hideGuideEntryForLabel(el);
     });
+  }
+
+  function formattedStringFromTextTarget(target) {
+    if (!target) return null;
+    if (target.nodeType === Node.TEXT_NODE) {
+      return target.parentElement;
+    }
+    return target.nodeType === Node.ELEMENT_NODE ? target : null;
   }
 
   let scheduled = false;
@@ -89,9 +125,25 @@
     for (const mutation of mutations) {
       if (mutation.type === "childList") {
         mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            hideGuideEntryForLabel(formattedStringFromTextTarget(node));
+            return;
+          }
           if (node.nodeType !== Node.ELEMENT_NODE) return;
           scanSubtree(node);
         });
+        // Text replacements inside existing guide labels.
+        if (mutation.target && mutation.target.nodeType === Node.ELEMENT_NODE) {
+          hideGuideEntryForLabel(mutation.target);
+          if (
+            mutation.target.tagName &&
+            mutation.target.tagName.toLowerCase() !== "yt-formatted-string"
+          ) {
+            hideGuideShortsEntries(mutation.target);
+          }
+        }
+      } else if (mutation.type === "characterData") {
+        hideGuideEntryForLabel(formattedStringFromTextTarget(mutation.target));
       } else if (mutation.type === "attributes") {
         if (matchesTarget(mutation.target)) {
           hideNode(mutation.target);
@@ -106,6 +158,7 @@
     observer.observe(root, {
       childList: true,
       subtree: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ["is-shorts", "class", "style"],
     });
